@@ -1,0 +1,2 @@
+PySide6-Essentials>=6.5.0
+markdown-it-py>=3.0.0
