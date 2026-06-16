@@ -5,7 +5,7 @@ import os
 import json
 import uuid
 import tempfile
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox, QWidget
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QAction
 from PySide6.QtCore import QObject, Qt, QRect, QLockFile, QPoint
 
@@ -22,6 +22,9 @@ class NoteManager(QObject):
         self.data_dir = "./data"
         self.config_file = os.path.join(self.data_dir, "config.json")
         os.makedirs(self.data_dir, exist_ok=True)
+        
+        # Dummy parent for taskbar hiding
+        self.dummy_parent = QWidget()
         
         # Note collections
         self.notes = {}               # Active note window objects: {id: StickyNote}
@@ -75,7 +78,7 @@ class NoteManager(QObject):
                         self.all_notes_config[note_id]["active"] = False
                         continue
                         
-                    note = StickyNote(note_id=note_id, manager=self)
+                    note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
                     note.config_changed.connect(self.save_all_config)
                     note.note_deleted.connect(self.delete_note)
                     
@@ -126,7 +129,7 @@ class NoteManager(QObject):
         default_x, default_y = 150, 150
         offset = 25 * (len(self.notes) % 5)
         
-        note = StickyNote(note_id=note_id, manager=self)
+        note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
         note.config_changed.connect(self.save_all_config)
         note.note_deleted.connect(self.delete_note)
         
@@ -176,7 +179,7 @@ class NoteManager(QObject):
             note_conf = self.all_notes_config.get(note_id)
             if note_conf:
                 note_conf["active"] = True
-                note = StickyNote(note_id=note_id, manager=self)
+                note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
                 note.config_changed.connect(self.save_all_config)
                 note.note_deleted.connect(self.delete_note)
                 
@@ -246,7 +249,7 @@ class NoteManager(QObject):
             note_conf = self.all_notes_config.get(note_id)
             if note_conf:
                 note_conf["active"] = True
-                note = StickyNote(note_id=note_id, manager=self)
+                note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
                 note.config_changed.connect(self.save_all_config)
                 note.note_deleted.connect(self.delete_note)
                 

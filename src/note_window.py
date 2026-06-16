@@ -192,8 +192,8 @@ class StickyNote(QWidget):
     config_changed = Signal()
     note_deleted = Signal(str)
 
-    def __init__(self, note_id=None, manager=None):
-        super().__init__()
+    def __init__(self, parent=None, note_id=None, manager=None):
+        super().__init__(parent)
         self.manager = manager
         self.note_id = note_id or str(uuid.uuid4())
         
@@ -282,7 +282,6 @@ class StickyNote(QWidget):
 
     def reinforce_stays_on_top(self):
         self.raise_()
-
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

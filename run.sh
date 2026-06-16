@@ -34,7 +34,7 @@ fi
 echo "Launching DigiNotes in Wayland/X11..."
 # Enable native Wayland support for Qt if the session is Wayland
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
-    export QT_QPA_PLATFORM="wayland;xcb"
+    export QT_QPA_PLATFORM="xcb"
 fi
 
 python3 src/main.py "$@"
