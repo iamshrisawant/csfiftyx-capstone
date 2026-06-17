@@ -168,13 +168,15 @@ class NotesDashboard(QWidget):
         self.notes_dir = os.path.join(base_dir, "data", "notes")
         
         # Window configuration - Compact Sidebar
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumSize(320, 460)
         self.resize(320, 520)
         
+        self.settings_dialog = None
         self.init_ui()
         self.setStyleSheet(get_dashboard_stylesheet())
+        self.setWindowIcon(self.manager.generate_tray_icon())
         
         # Center on screen initially
         screen_geo = self.manager.app.primaryScreen().geometry()
@@ -213,6 +215,44 @@ class NotesDashboard(QWidget):
         
         title_bar_layout.addStretch()
         
+        self.new_btn = QPushButton("+", self)
+        self.new_btn.setFixedSize(20, 20)
+        self.new_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #8E8E93;
+                border: none;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                color: white;
+            }
+        """)
+        self.new_btn.clicked.connect(self.create_note_clicked)
+        title_bar_layout.addWidget(self.new_btn)
+        
+        self.settings_btn = QPushButton("⚙", self)
+        self.settings_btn.setFixedSize(20, 20)
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #8E8E93;
+                border: none;
+                font-size: 13px;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                color: white;
+            }
+        """)
+        self.settings_btn.clicked.connect(self.open_settings)
+        title_bar_layout.addWidget(self.settings_btn)
+
         self.close_btn = QPushButton("×", self)
         self.close_btn.setFixedSize(20, 20)
         self.close_btn.setStyleSheet("""
@@ -263,6 +303,19 @@ class NotesDashboard(QWidget):
                 self.reload_notes()
                 break
 
+    def create_note_clicked(self):
+        self.manager.create_new_note()
+        self.reload_notes()
+
+    def open_settings(self):
+        from settings import SettingsDialog
+        if not self.settings_dialog:
+            self.settings_dialog = SettingsDialog(self.manager, parent=None)
+        self.settings_dialog.populate_note_selector()
+        self.settings_dialog.show()
+        self.settings_dialog.raise_()
+        self.settings_dialog.activateWindow()
+
     def title_press(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.title_drag_start = event.globalPosition().toPoint()
@@ -310,6 +363,9 @@ class NotesDashboard(QWidget):
             
             self.list_widget.addItem(item)
             self.list_widget.setItemWidget(item, row_widget)
+            
+        if hasattr(self, 'settings_dialog') and self.settings_dialog and self.settings_dialog.isVisible():
+            self.settings_dialog.populate_note_selector()
 
     def filter_notes(self, query):
         query = query.lower().strip()

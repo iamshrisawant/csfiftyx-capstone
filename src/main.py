@@ -8,7 +8,7 @@ import tempfile
 import getpass
 import datetime
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox, QWidget
-from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QAction
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QAction, QFont
 from PySide6.QtCore import QObject, Qt, QRect, QLockFile, QPoint
 
 from note_window import StickyNote
@@ -38,8 +38,16 @@ class NoteManager(QObject):
         self.notes = {}               # Active note window objects: {id: StickyNote}
         self.all_notes_config = {}    # All note configs (active & inactive): {id: config_dict}
         
+        # Default settings config
+        self.defaults_config = {
+            "theme": "distinct",
+            "pinned": False,
+            "width": 240,
+            "height": 200
+        }
+        
         # Load notes configuration
-        self.load_all_notes(skip_show=self.startup_mode)
+        self.load_all_notes()
         
         # Initialize Dashboard
         self.dashboard = NotesDashboard(self)
@@ -51,6 +59,9 @@ class NoteManager(QObject):
         if not self.all_notes_config:
             self.create_new_note(skip_show=self.startup_mode)
             
+        # Set global application window icon
+        self.app.setWindowIcon(self.generate_tray_icon())
+        
         # Hook up focus change monitoring
         self.app.focusWindowChanged.connect(self.handle_focus_window_changed)
 
@@ -61,7 +72,7 @@ class NoteManager(QObject):
         # Sort notes by date modified if possible, or just return values
         return list(self.all_notes_config.values())
 
-    def load_all_notes(self, skip_show=False):
+    def load_all_notes(self):
         if not os.path.exists(self.config_file):
             return
             
@@ -72,10 +83,18 @@ class NoteManager(QObject):
             print("Error loading config file:", e)
             return
             
+        # Load defaults if present
+        if "defaults" in config_data:
+            self.defaults_config.update(config_data["defaults"])
+            
         notes_config = config_data.get("notes", [])
         for note_conf in notes_config:
             note_id = note_conf.get("id")
             if note_id:
+                # Force active status to False if starting up in tray mode
+                if self.startup_mode:
+                    note_conf["active"] = False
+                    
                 # Add to all notes tracker
                 self.all_notes_config[note_id] = note_conf
                 
@@ -84,9 +103,6 @@ class NoteManager(QObject):
                     # Enforce limit of 6 on startup too
                     if len(self.notes) >= 6:
                         self.all_notes_config[note_id]["active"] = False
-                        continue
-                        
-                    if skip_show:
                         continue
                         
                     note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
@@ -103,7 +119,8 @@ class NoteManager(QObject):
             self.all_notes_config[note_id] = note.get_config()
             
         config_data = {
-            "notes": list(self.all_notes_config.values())
+            "notes": list(self.all_notes_config.values()),
+            "defaults": self.defaults_config
         }
         
         try:
@@ -145,20 +162,26 @@ class NoteManager(QObject):
         default_x, default_y = 150, 150
         offset = 25 * (len(self.notes) % 5)
         
-        # Assign distinct theme color
-        theme_key = self.select_distinct_theme_color()
+        # Assign defaults
+        theme_key = self.defaults_config.get("theme", "distinct")
+        if theme_key == "distinct":
+            theme_key = self.select_distinct_theme_color()
+            
+        pinned = self.defaults_config.get("pinned", False)
+        width = self.defaults_config.get("width", 240)
+        height = self.defaults_config.get("height", 200)
         
         initial_config = {
             "id": note_id,
             "theme": theme_key,
-            "pinned": True,
+            "pinned": pinned,
             "collapsed": False,
             "view_mode": "edit",
-            "active": True,
+            "active": not skip_show,
             "x": default_x + offset,
             "y": default_y + offset,
-            "w": 240,
-            "h": 200
+            "w": width,
+            "h": height
         }
         
         self.all_notes_config[note_id] = initial_config
@@ -371,9 +394,9 @@ class NoteManager(QObject):
         if sender and not success:
             sender.setChecked(not enabled)
 
-    def generate_tray_icon(self):
-        # Draw dynamic blue-and-yellow mini notepad icon in memory
-        pixmap = QPixmap(32, 32)
+    def render_icon_pixmap(self, size):
+        f = size / 32.0
+        pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
         
         painter = QPainter(pixmap)
@@ -382,22 +405,35 @@ class NoteManager(QObject):
         # Note back card (Blue theme accent)
         painter.setBrush(QColor("#0A84FF"))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(QRect(4, 4, 24, 24), 4, 4)
+        painter.drawRoundedRect(
+            QRect(int(4 * f), int(4 * f), int(24 * f), int(24 * f)), 
+            int(4 * f), int(4 * f)
+        )
         
         # Note paper face (Sunny Yellow theme accent)
         painter.setBrush(QColor("#FDF4C8"))
-        painter.drawRoundedRect(QRect(8, 8, 20, 20), 2, 2)
+        painter.drawRoundedRect(
+            QRect(int(8 * f), int(8 * f), int(20 * f), int(20 * f)), 
+            int(2 * f), int(2 * f)
+        )
         
         # Draw lines representing text
         pen = QPen(QColor("#CA8A04"))
-        pen.setWidth(2)
+        pen.setWidth(max(1, int(2 * f)))
         painter.setPen(pen)
-        painter.drawLine(12, 13, 22, 13)
-        painter.drawLine(12, 17, 22, 17)
-        painter.drawLine(12, 21, 18, 21)
+        painter.drawLine(int(12 * f), int(13 * f), int(22 * f), int(13 * f))
+        painter.drawLine(int(12 * f), int(17 * f), int(22 * f), int(17 * f))
+        painter.drawLine(int(12 * f), int(21 * f), int(18 * f), int(21 * f))
         
         painter.end()
-        return QIcon(pixmap)
+        return pixmap
+
+    def generate_tray_icon(self):
+        icon = QIcon()
+        icon.addPixmap(self.render_icon_pixmap(32))
+        icon.addPixmap(self.render_icon_pixmap(64))
+        icon.addPixmap(self.render_icon_pixmap(256))
+        return icon
 
     def tray_icon_activated(self, reason):
         if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
@@ -415,6 +451,10 @@ class NoteManager(QObject):
         # Save state of all notes
         for note in self.notes.values():
             note.save_note()
+        # Set all notes to inactive
+        for note_id in self.all_notes_config:
+            self.all_notes_config[note_id]["active"] = False
+        self.notes.clear()
         self.save_all_config()
         self.app.quit()
 

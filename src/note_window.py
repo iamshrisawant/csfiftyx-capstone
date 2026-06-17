@@ -24,6 +24,8 @@ class MarkdownHelpOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumSize(300, 360)
         self.resize(300, 400)
+        if self.parent_note and self.parent_note.manager:
+            self.setWindowIcon(self.parent_note.manager.generate_tray_icon())
         
         # Base glassmorphic panel
         self.main_widget = QWidget(self)
@@ -282,9 +284,11 @@ class StickyNote(QWidget):
         self.is_focused = False
         
         # Window attributes
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumSize(100, 80)
+        if self.manager:
+            self.setWindowIcon(self.manager.generate_tray_icon())
         
         self.init_ui()
         self.load_note()
@@ -541,6 +545,11 @@ class StickyNote(QWidget):
 
     def toggle_pinned(self):
         self.is_pinned = not self.is_pinned
+        self.apply_pinned_state()
+        self.config_changed.emit()
+
+    def set_pinned(self, pinned):
+        self.is_pinned = pinned
         self.apply_pinned_state()
         self.config_changed.emit()
 
