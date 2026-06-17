@@ -166,7 +166,7 @@ DASHBOARD_QSS = """
 #DashboardTitle {
     color: #FFFFFF;
     font-weight: bold;
-    font-size: 14px;
+    font-size: 15px;
     font-family: 'Inter', 'Segoe UI', sans-serif;
 }
 
@@ -175,8 +175,8 @@ DASHBOARD_QSS = """
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     color: #FFFFFF;
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 7px 12px;
+    font-size: 13px;
     font-family: 'Inter', sans-serif;
 }
 
@@ -199,7 +199,7 @@ DASHBOARD_QSS = """
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
     padding: 0px; /* Set padding on the custom widget instead */
-    margin-bottom: 6px;
+    margin-bottom: 8px;
 }
 
 #NotesList::item:hover {
@@ -216,13 +216,13 @@ DASHBOARD_QSS = """
 .ItemTitle {
     color: #FFFFFF;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     font-family: 'Inter', sans-serif;
 }
 
 .ItemSubtitle {
     color: #AEAEB2;
-    font-size: 10px;
+    font-size: 11px;
     font-family: 'Inter', sans-serif;
 }
 

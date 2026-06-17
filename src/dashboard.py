@@ -53,7 +53,7 @@ class NoteListItemWidget(QWidget):
         self.setObjectName("NoteListItemWidget")
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(8)
         
         # Color dot indicator
@@ -72,7 +72,7 @@ class NoteListItemWidget(QWidget):
         text_widget = QWidget(self)
         text_layout = QVBoxLayout(text_widget)
         text_layout.setContentsMargins(0, 0, 0, 0)
-        text_layout.setSpacing(2)
+        text_layout.setSpacing(4)
         
         title_lbl = QLabel(self.title_text, self)
         title_lbl.setProperty("class", "ItemTitle")
@@ -104,13 +104,15 @@ class NotesDashboard(QWidget):
     def __init__(self, manager):
         super().__init__()
         self.manager = manager
-        self.notes_dir = os.path.join("./data", "notes")
+        # Resolve path relative to script root for cross-platform reliability
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.notes_dir = os.path.join(base_dir, "data", "notes")
         
         # Window configuration - Compact Sidebar
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumSize(260, 400)
-        self.resize(260, 480)
+        self.setMinimumSize(320, 460)
+        self.resize(320, 520)
         
         self.init_ui()
         self.setStyleSheet(get_dashboard_stylesheet())
@@ -173,8 +175,10 @@ class NotesDashboard(QWidget):
         
         content_layout.addWidget(title_bar)
         
-        # Title bar dragging support
+        # Title bar dragging support with fallback
         title_bar.mousePressEvent = self.title_press
+        title_bar.mouseMoveEvent = self.title_move
+        title_bar.mouseReleaseEvent = self.title_release
         
         # 2. Search Box
         self.search_bar = QLineEdit(self)
@@ -236,10 +240,28 @@ class NotesDashboard(QWidget):
 
     def title_press(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            window = self.window()
-            if window and window.windowHandle():
-                window.windowHandle().startSystemMove()
-                event.accept()
+            self.title_drag_start = event.globalPosition().toPoint()
+            event.accept()
+
+    def title_move(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'title_drag_start'):
+            dist = (event.globalPosition().toPoint() - self.title_drag_start).manhattanLength()
+            if dist > 3:
+                window = self.window()
+                moved = False
+                if window and window.windowHandle():
+                    moved = window.windowHandle().startSystemMove()
+                if not moved:
+                    # Fallback to manual window moving
+                    delta = event.globalPosition().toPoint() - self.title_drag_start
+                    window.move(window.pos() + delta)
+                    self.title_drag_start = event.globalPosition().toPoint()
+            event.accept()
+
+    def title_release(self, event):
+        if hasattr(self, 'title_drag_start'):
+            delattr(self, 'title_drag_start')
+        event.accept()
 
     def showEvent(self, event):
         self.reload_notes()
@@ -256,7 +278,7 @@ class NotesDashboard(QWidget):
                 continue
                 
             item = QListWidgetItem(self.list_widget)
-            item.setSizeHint(QSize(100, 42))
+            item.setSizeHint(QSize(100, 54))
             
             row_widget = NoteListItemWidget(note_id, note_data, self.notes_dir, self)
             row_widget.delete_triggered.connect(self.handle_delete_triggered)

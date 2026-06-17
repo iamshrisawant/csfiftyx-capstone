@@ -14,15 +14,25 @@ from PySide6.QtCore import Qt, QSize, QRect, QPoint, Signal, QPropertyAnimation,
 from editor import MarkdownEditor
 from styles import get_theme_stylesheet, THEMES
 
-class MarkdownHelpOverlay(QFrame):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("HelpOverlay")
-        self.setStyleSheet("""
-            #HelpOverlay {
+class MarkdownHelpOverlay(QWidget):
+    def __init__(self, parent_note=None):
+        super().__init__(None)
+        self.parent_note = parent_note
+        self.setObjectName("HelpGuideWidget")
+        
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMinimumSize(300, 360)
+        self.resize(300, 400)
+        
+        # Base glassmorphic panel
+        self.main_widget = QWidget(self)
+        self.main_widget.setObjectName("HelpGuideWidget")
+        self.main_widget.setStyleSheet("""
+            #HelpGuideWidget {
                 background-color: rgba(20, 20, 20, 0.98);
                 border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 12px;
+                border-radius: 14px;
             }
             QLabel {
                 color: #F2F2F7;
@@ -30,18 +40,33 @@ class MarkdownHelpOverlay(QFrame):
             }
         """)
         
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(14, 12, 14, 12)
-        main_layout.setSpacing(6)
+        self.shadow = QGraphicsDropShadowEffect(self)
+        self.shadow.setBlurRadius(16)
+        self.shadow.setColor(QColor(0, 0, 0, 100))
+        self.shadow.setOffset(0, 6)
+        self.main_widget.setGraphicsEffect(self.shadow)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.addWidget(self.main_widget)
+        
+        content_layout = QVBoxLayout(self.main_widget)
+        content_layout.setContentsMargins(14, 12, 14, 12)
+        content_layout.setSpacing(10)
         
         # Header Row
-        header_layout = QHBoxLayout()
+        title_bar = QWidget(self)
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(0, 0, 0, 0)
+        
         title = QLabel("📝 Formatting Guide", self)
-        title.setStyleSheet("font-weight: bold; font-size: 13px; color: #0A84FF;")
-        header_layout.addWidget(title)
+        title.setStyleSheet("font-weight: bold; font-size: 14px; color: #0A84FF;")
+        title_bar_layout.addWidget(title)
+        
+        title_bar_layout.addStretch()
         
         close_btn = QPushButton("×", self)
-        close_btn.setFixedSize(18, 18)
+        close_btn.setFixedSize(20, 20)
         close_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
@@ -49,14 +74,21 @@ class MarkdownHelpOverlay(QFrame):
                 border: none;
                 font-size: 16px;
                 font-weight: bold;
+                border-radius: 4px;
             }
             QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
                 color: #FF453A;
             }
         """)
         close_btn.clicked.connect(self.hide)
-        header_layout.addWidget(close_btn)
-        main_layout.addLayout(header_layout)
+        title_bar_layout.addWidget(close_btn)
+        content_layout.addWidget(title_bar)
+        
+        # Dragging support
+        title_bar.mousePressEvent = self.title_press
+        title_bar.mouseMoveEvent = self.title_move
+        title_bar.mouseReleaseEvent = self.title_release
         
         # Scroll Area for guide content
         scroll = QScrollArea(self)
@@ -78,6 +110,9 @@ class MarkdownHelpOverlay(QFrame):
                 border-radius: 3px;
                 min-height: 20px;
             }
+            QScrollBar::handle:vertical:hover {
+                background: rgba(255, 255, 255, 0.4);
+            }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
             }
@@ -87,7 +122,7 @@ class MarkdownHelpOverlay(QFrame):
         scroll_widget.setStyleSheet("background: transparent;")
         scroll_layout = QVBoxLayout(scroll_widget)
         scroll_layout.setContentsMargins(0, 0, 4, 0)
-        scroll_layout.setSpacing(8)
+        scroll_layout.setSpacing(10)
         
         help_sections = [
             ("Headers", "# Heading 1\n## Heading 2\n### Heading 3\n#### Heading 4\n##### Heading 5"),
@@ -101,11 +136,11 @@ class MarkdownHelpOverlay(QFrame):
         
         for sec_title, sec_content in help_sections:
             sec_lbl = QLabel(f"<b>{sec_title}</b>", self)
-            sec_lbl.setStyleSheet("font-size: 11px; color: #AEAEB2;")
+            sec_lbl.setStyleSheet("font-size: 12px; color: #AEAEB2;")
             scroll_layout.addWidget(sec_lbl)
             
             content_lbl = QLabel(sec_content, self)
-            content_lbl.setStyleSheet("font-size: 10px; color: #30D158; font-family: 'Courier New'; line-height: 1.4;")
+            content_lbl.setStyleSheet("font-size: 11px; color: #30D158; font-family: 'Courier New'; line-height: 1.4;")
             content_lbl.setWordWrap(True)
             scroll_layout.addWidget(content_lbl)
             
@@ -117,9 +152,34 @@ class MarkdownHelpOverlay(QFrame):
             scroll_layout.addWidget(line)
             
         scroll.setWidget(scroll_widget)
-        main_layout.addWidget(scroll)
+        content_layout.addWidget(scroll)
         
         self.hide()
+
+    def title_press(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.title_drag_start = event.globalPosition().toPoint()
+            event.accept()
+
+    def title_move(self, event):
+        if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'title_drag_start'):
+            dist = (event.globalPosition().toPoint() - self.title_drag_start).manhattanLength()
+            if dist > 3:
+                window = self.window()
+                moved = False
+                if window and window.windowHandle():
+                    moved = window.windowHandle().startSystemMove()
+                if not moved:
+                    # Fallback to manual window moving
+                    delta = event.globalPosition().toPoint() - self.title_drag_start
+                    window.move(window.pos() + delta)
+                    self.title_drag_start = event.globalPosition().toPoint()
+            event.accept()
+
+    def title_release(self, event):
+        if hasattr(self, 'title_drag_start'):
+            delattr(self, 'title_drag_start')
+        event.accept()
 
 
 class TitleBar(QWidget):
@@ -177,9 +237,16 @@ class TitleBar(QWidget):
             dist = (event.globalPosition().toPoint() - self.drag_start_pos).manhattanLength()
             if dist > 3:
                 window = self.window()
+                moved = False
                 if window.windowHandle():
-                    window.windowHandle().startSystemMove()
-                delattr(self, 'drag_start_pos')
+                    moved = window.windowHandle().startSystemMove()
+                if not moved:
+                    # Fallback to manual window moving
+                    delta = event.globalPosition().toPoint() - self.drag_start_pos
+                    window.move(window.pos() + delta)
+                    self.drag_start_pos = event.globalPosition().toPoint()
+                else:
+                    delattr(self, 'drag_start_pos')
             event.accept()
 
     def mouseReleaseEvent(self, event):
@@ -197,8 +264,9 @@ class StickyNote(QWidget):
         self.manager = manager
         self.note_id = note_id or str(uuid.uuid4())
         
-        # Storage
-        self.data_dir = "./data"
+        # Storage (resolved relative to script root for cross-platform reliability)
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.data_dir = os.path.join(base_dir, "data")
         self.notes_dir = os.path.join(self.data_dir, "notes")
         os.makedirs(self.notes_dir, exist_ok=True)
         self.filepath = os.path.join(self.notes_dir, f"{self.note_id}.md")
@@ -280,13 +348,15 @@ class StickyNote(QWidget):
         super().showEvent(event)
         self.reinforce_stays_on_top()
 
+    def closeEvent(self, event):
+        self.help_overlay.close()
+        super().closeEvent(event)
+
     def reinforce_stays_on_top(self):
         self.raise_()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # Cover the entire note area (margins of note window are 8px)
-        self.help_overlay.setGeometry(8, 8, self.width() - 16, self.height() - 16)
 
     # Hover & Focus opacity controls
     def enterEvent(self, event):
@@ -300,7 +370,8 @@ class StickyNote(QWidget):
     def set_focused_state(self, is_focused):
         self.is_focused = is_focused
         self.apply_theme_state(self.underMouse() or self.is_focused)
-        self.reinforce_stays_on_top()
+        if is_focused:
+            self.reinforce_stays_on_top()
 
     def apply_theme_state(self, is_hovered):
         if self.is_collapsed:
@@ -350,9 +421,16 @@ class StickyNote(QWidget):
                     dist = (event.globalPosition().toPoint() - self.dot_drag_start).manhattanLength()
                     if dist > 3:
                         self.dot_drag_triggered = True
+                        moved = False
                         if self.windowHandle():
-                            self.windowHandle().startSystemMove()
-                        delattr(self, 'dot_drag_start')
+                            moved = self.windowHandle().startSystemMove()
+                        if not moved:
+                            # Fallback to manual window moving
+                            delta = event.globalPosition().toPoint() - self.dot_drag_start
+                            self.move(self.pos() + delta)
+                            self.dot_drag_start = event.globalPosition().toPoint()
+                        else:
+                            delattr(self, 'dot_drag_start')
                     return True
             elif event.type() == QMouseEvent.Type.MouseButtonRelease:
                 if event.button() == Qt.MouseButton.LeftButton:
@@ -378,9 +456,16 @@ class StickyNote(QWidget):
         if event.buttons() == Qt.MouseButton.LeftButton and hasattr(self, 'drag_start_pos'):
             dist = (event.globalPosition().toPoint() - self.drag_start_pos).manhattanLength()
             if dist > 3:
+                moved = False
                 if self.windowHandle():
-                    self.windowHandle().startSystemMove()
-                delattr(self, 'drag_start_pos')
+                    moved = self.windowHandle().startSystemMove()
+                if not moved:
+                    # Fallback to manual window moving
+                    delta = event.globalPosition().toPoint() - self.drag_start_pos
+                    self.move(self.pos() + delta)
+                    self.drag_start_pos = event.globalPosition().toPoint()
+                else:
+                    delattr(self, 'drag_start_pos')
             event.accept()
 
     def mouseReleaseEvent(self, event):
@@ -426,8 +511,28 @@ class StickyNote(QWidget):
         menu.exec(self.title_bar.settings_btn.mapToGlobal(QPoint(0, self.title_bar.settings_btn.height())))
 
     def show_help_overlay(self):
+        if not self.help_overlay.isVisible():
+            note_geo = self.geometry()
+            w, h = 300, 400
+            
+            # Try to place on the right side of the note window
+            x = note_geo.right() + 8
+            y = note_geo.top()
+            
+            # Check screen boundaries
+            screen_geo = self.screen().geometry()
+            if x + w > screen_geo.right():
+                # Try placing on the left side
+                x = note_geo.left() - w - 8
+                if x < screen_geo.left():
+                    # Fallback to centering or clamping
+                    x = max(screen_geo.left() + 8, screen_geo.right() - w - 8)
+            
+            self.help_overlay.setGeometry(x, y, w, h)
+            
         self.help_overlay.show()
         self.help_overlay.raise_()
+        self.help_overlay.activateWindow()
 
     def set_theme(self, theme_key):
         self.theme_key = theme_key
@@ -500,6 +605,7 @@ class StickyNote(QWidget):
         self.geom_anim.start()
 
     def deactivate(self):
+        self.help_overlay.hide()
         self.hide()
         self.config_changed.emit()
 

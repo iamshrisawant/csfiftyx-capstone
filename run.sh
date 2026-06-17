@@ -31,10 +31,13 @@ if [ $? -ne 0 ]; then
     fi
 fi
 
-echo "Launching DigiNotes in Wayland/X11..."
-# Enable native Wayland support for Qt if the session is Wayland
+echo "Launching DigiNotes in Wayland/X11 (XCB)..."
+# Force XWayland/XCB under Wayland by default to support Stays-on-Top functionality.
+# Set DIGINOTES_NATIVE_WAYLAND=1 to force native Wayland.
 if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
-    export QT_QPA_PLATFORM="xcb"
+    if [ "$DIGINOTES_NATIVE_WAYLAND" != "1" ]; then
+        export QT_QPA_PLATFORM="xcb"
+    fi
 fi
 
 python3 src/main.py "$@"

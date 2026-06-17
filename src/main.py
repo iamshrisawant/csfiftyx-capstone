@@ -5,6 +5,7 @@ import os
 import json
 import uuid
 import tempfile
+import getpass
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox, QWidget
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QAction
 from PySide6.QtCore import QObject, Qt, QRect, QLockFile, QPoint
@@ -12,26 +13,32 @@ from PySide6.QtCore import QObject, Qt, QRect, QLockFile, QPoint
 from note_window import StickyNote
 from dashboard import NotesDashboard
 from styles import THEMES
+from autostart import AutostartManager
 
 class NoteManager(QObject):
-    def __init__(self, app):
+    def __init__(self, app, startup_mode=False):
         super().__init__()
         self.app = app
+        self.startup_mode = startup_mode
         
-        # File paths
-        self.data_dir = "./data"
+        # File paths (resolved relative to script root for cross-platform reliability)
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.data_dir = os.path.join(self.base_dir, "data")
         self.config_file = os.path.join(self.data_dir, "config.json")
         os.makedirs(self.data_dir, exist_ok=True)
         
         # Dummy parent for taskbar hiding
         self.dummy_parent = QWidget()
         
+        # Autostart Manager
+        self.autostart_mgr = AutostartManager(self.base_dir)
+        
         # Note collections
         self.notes = {}               # Active note window objects: {id: StickyNote}
         self.all_notes_config = {}    # All note configs (active & inactive): {id: config_dict}
         
         # Load notes configuration
-        self.load_all_notes()
+        self.load_all_notes(skip_show=self.startup_mode)
         
         # Initialize Dashboard
         self.dashboard = NotesDashboard(self)
@@ -41,7 +48,7 @@ class NoteManager(QObject):
         
         # Auto-create a note if none exist at all
         if not self.all_notes_config:
-            self.create_new_note()
+            self.create_new_note(skip_show=self.startup_mode)
             
         # Hook up focus change monitoring
         self.app.focusWindowChanged.connect(self.handle_focus_window_changed)
@@ -53,7 +60,7 @@ class NoteManager(QObject):
         # Sort notes by date modified if possible, or just return values
         return list(self.all_notes_config.values())
 
-    def load_all_notes(self):
+    def load_all_notes(self, skip_show=False):
         if not os.path.exists(self.config_file):
             return
             
@@ -76,6 +83,9 @@ class NoteManager(QObject):
                     # Enforce limit of 6 on startup too
                     if len(self.notes) >= 6:
                         self.all_notes_config[note_id]["active"] = False
+                        continue
+                        
+                    if skip_show:
                         continue
                         
                     note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
@@ -112,15 +122,15 @@ class NoteManager(QObject):
         least_used = min(counts, key=counts.get)
         return least_used
 
-    def create_new_note(self):
-        # Enforce limit of 6 active notes
+    def create_new_note(self, skip_show=False):
         if len(self.notes) >= 6:
-            QMessageBox.warning(
-                None, 
-                "Active Notes Limit", 
-                "You have reached the maximum limit of 6 active notes.\n"
-                "Please close or delete an existing note before spawning a new one."
-            )
+            if not skip_show:
+                QMessageBox.warning(
+                    None, 
+                    "Active Notes Limit", 
+                    "You have reached the maximum limit of 6 active notes.\n"
+                    "Please close or delete an existing note before spawning a new one."
+                )
             return None
             
         note_id = str(uuid.uuid4())
@@ -149,13 +159,20 @@ class NoteManager(QObject):
             "h": 200
         }
         
-        note.load_config(initial_config)
-        self.notes[note_id] = note
         self.all_notes_config[note_id] = initial_config
         
-        note.show()
+        if not skip_show:
+            note = StickyNote(parent=self.dummy_parent, note_id=note_id, manager=self)
+            note.config_changed.connect(self.save_all_config)
+            note.note_deleted.connect(self.delete_note)
+            note.load_config(initial_config)
+            self.notes[note_id] = note
+            note.show()
+            self.save_all_config()
+            return note
+            
         self.save_all_config()
-        return note
+        return None
 
     def toggle_note_active(self, note_id, active):
         if active:
@@ -320,6 +337,12 @@ class NoteManager(QObject):
         collapse_action.triggered.connect(self.collapse_all_active_notes)
         menu.addAction(collapse_action)
         
+        # Autostart option
+        autostart_action = QAction("⚙ Run on System Startup", self, checkable=True)
+        autostart_action.setChecked(self.autostart_mgr.is_enabled())
+        autostart_action.triggered.connect(self.toggle_autostart)
+        menu.addAction(autostart_action)
+        
         menu.addSeparator()
         
         exit_action = QAction("❌ Exit DigiNotes", self)
@@ -329,6 +352,12 @@ class NoteManager(QObject):
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.activated.connect(self.tray_icon_activated)
         self.tray_icon.show()
+
+    def toggle_autostart(self, enabled):
+        success = self.autostart_mgr.set_enabled(enabled)
+        sender = self.sender()
+        if sender and not success:
+            sender.setChecked(not enabled)
 
     def generate_tray_icon(self):
         # Draw dynamic blue-and-yellow mini notepad icon in memory
@@ -379,8 +408,12 @@ class NoteManager(QObject):
 
 
 def main():
-    # Lock check to enforce single instance
-    lock_file = QLockFile(os.path.join(tempfile.gettempdir(), "diginotes.lock"))
+    # Lock check to enforce single instance (using user-specific suffix to avoid multi-user permission collision)
+    try:
+        username = getpass.getuser()
+    except Exception:
+        username = "default"
+    lock_file = QLockFile(os.path.join(tempfile.gettempdir(), f"diginotes_{username}.lock"))
     if not lock_file.tryLock(100):
         # Start a temporary application context just to show the warning messagebox
         app = QApplication(sys.argv)
@@ -395,7 +428,10 @@ def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     
-    manager = NoteManager(app)
+    # Parse arguments
+    startup_mode = "--startup" in sys.argv or "-s" in sys.argv
+    
+    manager = NoteManager(app, startup_mode=startup_mode)
     
     # Keep lock_file reference alive throughout execution
     app.setProperty("lock_file", lock_file)
