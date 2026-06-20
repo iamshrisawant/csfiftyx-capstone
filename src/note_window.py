@@ -266,9 +266,17 @@ class StickyNote(QWidget):
         self.manager = manager
         self.note_id = note_id or str(uuid.uuid4())
         
-        # Storage (resolved relative to script root for cross-platform reliability)
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.data_dir = os.path.join(base_dir, "data")
+        # Storage (using user-writable directory to prevent permission errors)
+        if self.manager and hasattr(self.manager, 'data_dir'):
+            self.data_dir = self.manager.data_dir
+        else:
+            from PySide6.QtCore import QStandardPaths
+            data_location = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+            if not data_location.rstrip("/\\").endswith("DigiNotes"):
+                self.data_dir = os.path.join(data_location, "DigiNotes")
+            else:
+                self.data_dir = data_location
+                
         self.notes_dir = os.path.join(self.data_dir, "notes")
         os.makedirs(self.notes_dir, exist_ok=True)
         self.filepath = os.path.join(self.notes_dir, f"{self.note_id}.md")

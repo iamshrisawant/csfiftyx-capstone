@@ -163,9 +163,17 @@ class NotesDashboard(QWidget):
     def __init__(self, manager):
         super().__init__()
         self.manager = manager
-        # Resolve path relative to script root for cross-platform reliability
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.notes_dir = os.path.join(base_dir, "data", "notes")
+        # Resolve notes directory using manager's data_dir
+        if self.manager and hasattr(self.manager, 'data_dir'):
+            self.notes_dir = os.path.join(self.manager.data_dir, "notes")
+        else:
+            from PySide6.QtCore import QStandardPaths
+            data_location = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+            if not data_location.rstrip("/\\").endswith("DigiNotes"):
+                data_dir = os.path.join(data_location, "DigiNotes")
+            else:
+                data_dir = data_location
+            self.notes_dir = os.path.join(data_dir, "notes")
         
         # Window configuration - Compact Sidebar
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)

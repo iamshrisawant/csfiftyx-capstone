@@ -9,12 +9,21 @@ import getpass
 import datetime
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox, QWidget
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QAction, QFont
-from PySide6.QtCore import QObject, Qt, QRect, QLockFile, QPoint
+from PySide6.QtCore import QObject, Qt, QRect, QLockFile, QPoint, QStandardPaths, QCoreApplication
 
 from note_window import StickyNote
 from dashboard import NotesDashboard
 from styles import THEMES
 from autostart import AutostartManager
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class NoteManager(QObject):
     def __init__(self, app, startup_mode=False):
@@ -22,9 +31,16 @@ class NoteManager(QObject):
         self.app = app
         self.startup_mode = startup_mode
         
-        # File paths (resolved relative to script root for cross-platform reliability)
+        # File paths (resolved using QStandardPaths for cross-platform robustness)
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.data_dir = os.path.join(self.base_dir, "data")
+        
+        # Set data_dir to %APPDATA%/DigiNotes on Windows or ~/.local/share/DigiNotes on Linux
+        data_location = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
+        if not data_location.rstrip("/\\").endswith("DigiNotes"):
+            self.data_dir = os.path.join(data_location, "DigiNotes")
+        else:
+            self.data_dir = data_location
+            
         self.config_file = os.path.join(self.data_dir, "config.json")
         os.makedirs(self.data_dir, exist_ok=True)
         
@@ -464,6 +480,15 @@ class NoteManager(QObject):
 
 
 def main():
+    # Force XWayland/XCB under Wayland by default to support Stays-on-Top functionality.
+    # Set DIGINOTES_NATIVE_WAYLAND=1 to force native Wayland.
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+        if os.environ.get("DIGINOTES_NATIVE_WAYLAND") != "1":
+            os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+    # Set Application details
+    QCoreApplication.setApplicationName("DigiNotes")
+
     # Lock check to enforce single instance (using user-specific suffix to avoid multi-user permission collision)
     try:
         username = getpass.getuser()

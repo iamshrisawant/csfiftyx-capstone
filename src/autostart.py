@@ -8,6 +8,8 @@ class AutostartManager:
         self.system = platform.system()
         
     def get_launcher_path(self):
+        if getattr(sys, 'frozen', False):
+            return sys.executable
         if self.system == "Windows":
             return os.path.join(self.base_dir, "run.bat")
         else:
