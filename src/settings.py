@@ -250,7 +250,7 @@ class SettingsDialog(QWidget):
         layout.addLayout(theme_layout)
         
         # Pinning
-        self.note_pin_chk = QCheckBox("Pinned (Always-on-Top)", self.tab_individual)
+        self.note_pin_chk = QCheckBox("Pinned", self.tab_individual)
         layout.addWidget(self.note_pin_chk)
         
         # Dimensions
